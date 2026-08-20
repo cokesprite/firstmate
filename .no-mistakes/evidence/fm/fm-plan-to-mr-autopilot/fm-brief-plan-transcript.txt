@@ -1,0 +1,47 @@
+End-to-end demonstration of bin/fm-brief.sh --plan (ship scaffold, throwaway FM_HOME inside the worktree)
+========================================================================================================
+
+$ cd <worktree>
+$ mkdir -p .test-demo-home/data .test-demo-plans
+$ printf '# PLAN: add a fleet heartbeatchk\n\n## Scope\nAdd a periodic heartbeat check to the fleet supervisor.\n\n## Invariants\nNo change to existing wake semantics.\n' > .test-demo-plans/fleet-heartbeat.PLAN.md
+
+--- 1. Scaffold a ship brief bound to the PLAN (relative path resolves to absolute) ---
+$ FM_HOME="$(pwd -P)/.test-demo-home" bash bin/fm-brief.sh fm-plan-demo some-proj --mode no-mistakes --plan .test-demo-plans/fleet-heartbeat.PLAN.md
+scaffolded: /Users/chunchen/.no-mistakes/worktrees/8a3aa331c6e1/01M0FQP1Q2FH4N6N0NWTXNBF2V/.test-demo-home/data/fm-plan-demo/brief.md (ship, mode=no-mistakes; replace {TASK})
+
+The generated brief gains (see fm-brief-plan-demo.md for the full file):
+  # Approved PLAN
+  The captain approved the PLAN at `/Users/chunchen/.no-mistakes/worktrees/8a3aa331c6e1/01M0FQP1Q2FH4N6N0NWTXNBF2V/.test-demo-plans/fleet-heartbeat.PLAN.md`; read it in full before touching code.
+  Load and follow `drive-plan-to-validated-mr` as the execution contract for this task.
+  Your MR description must carry a `PLAN Contract` section with `scope`, `invariants`, `evidence`, and `deviation` subsections, stating `none` explicitly when the MR does not deviate from the PLAN.
+Safety contract remains intact: worktree-isolation assertion, status protocol line, and
+`Delivery contract: mode=no-mistakes` machine-readable line all present; composes with every --mode.
+
+--- 2. Missing file is refused loudly, nothing written ---
+$ FM_HOME="$(pwd -P)/.test-demo-home" bash bin/fm-brief.sh fm-plan-missing some-proj --mode no-mistakes --plan .test-demo-plans/NOPE.md
+error: --plan file not found: /Users/chunchen/.no-mistakes/worktrees/8a3aa331c6e1/01M0FQP1Q2FH4N6N0NWTXNBF2V/.test-demo-plans/NOPE.md
+exit=1
+(no data/fm-plan-missing/brief.md written)
+
+--- 3. Empty value refused ---
+$ FM_HOME="$(pwd -P)/.test-demo-home" bash bin/fm-brief.sh fm-plan-empty some-proj --mode no-mistakes --plan=
+error: --plan requires a value
+exit=1
+
+--- 4. --plan on a scout scaffold refused (delivery contract only exists for ship) ---
+$ FM_HOME="$(pwd -P)/.test-demo-home" bash bin/fm-brief.sh fm-plan-scout some-proj --scout --plan .test-demo-plans/fleet-heartbeat.PLAN.md
+error: --plan applies only to ship briefs; a scout delivers a report and a secondmate charter is not a delivery contract
+exit=1
+
+--- 5. Brief without --plan carries no Approved PLAN section (grep count) ---
+$ FM_HOME="$(pwd -P)/.test-demo-home" bash bin/fm-brief.sh fm-plan-none some-proj --mode direct-PR
+$ grep -c '# Approved PLAN' .test-demo-home/data/fm-plan-none/brief.md
+0
+
+--- Automated colocated tests (tests/fm-brief.test.sh, run through the executable) ---
+ok - fm-brief.sh: --plan injects the PLAN contract and composes with every ship mode
+ok - fm-brief.sh: --plan resolves relative paths and refuses misuse loudly
+(all 22 fm-brief tests pass)
+
+--- bin/fm-doc-audience-check.sh (audience inventory incl. new plan-execution skill) ---
+fm-doc-audience-check: ok surfaces=70 local_links=255
