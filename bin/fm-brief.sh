@@ -38,9 +38,10 @@
 #   section 7's default PLAN-execution path): the path is resolved to absolute,
 #   a missing file is refused, and the brief gains a section that makes the PLAN
 #   required reading, names the drive-plan-to-validated-mr skill as the worker's
-#   execution contract, and requires the worker's MR description to carry a PLAN
-#   Contract section (scope / invariants / evidence / deviation, an explicit
-#   none when there is no deviation). It composes with --mode and --herdr-lab
+#   execution contract, and requires the worker's MR description to carry a
+#   '## PLAN Contract' self-declaration section in pointer form (Plan /
+#   Evidence / Deviation; the format is owned by reframe-and-plan
+#   references/plan-handoff.md). It composes with --mode and --herdr-lab
 #   and is refused on scout and secondmate scaffolds.
 # no-mistakes-prod-only is a registry policy, not a task mode; resolve it to one of
 # the three concrete modes at intake before calling this script.
@@ -354,7 +355,7 @@ IFS= read -r -d '' PLAN_BLOCK <<EOF || true
 # Approved PLAN
 The captain approved the PLAN at \`$PLAN_ABS\`; read it in full before touching code.
 Load and follow \`drive-plan-to-validated-mr\` as the execution contract for this task.
-Your MR description must carry a \`PLAN Contract\` section with \`scope\`, \`invariants\`, \`evidence\`, and \`deviation\` subsections, stating \`none\` explicitly when the MR does not deviate from the PLAN.
+Your MR description must carry a '## PLAN Contract' self-declaration section (Plan / Evidence / Deviation; 'none' allowed for Deviation); the format is owned by the PLAN contract schema owner (reframe-and-plan references/plan-handoff.md).
 EOF
 fi
 

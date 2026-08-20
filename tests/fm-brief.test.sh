@@ -713,8 +713,10 @@ test_plan_flag_injects_plan_contract_for_every_mode() {
       "$mode: brief did not record the absolute PLAN path as required reading"
     assert_grep "Load and follow \`drive-plan-to-validated-mr\` as the execution contract for this task." "$brief" \
       "$mode: brief did not name the PLAN execution contract"
-    assert_grep "Your MR description must carry a \`PLAN Contract\` section with \`scope\`, \`invariants\`, \`evidence\`, and \`deviation\` subsections, stating \`none\` explicitly when the MR does not deviate from the PLAN." "$brief" \
-      "$mode: brief did not require the MR PLAN Contract section"
+    assert_grep "Your MR description must carry a '## PLAN Contract' self-declaration section (Plan / Evidence / Deviation; 'none' allowed for Deviation); the format is owned by the PLAN contract schema owner (reframe-and-plan references/plan-handoff.md)." "$brief" \
+      "$mode: brief did not require the MR PLAN Contract self-declaration pointer"
+    assert_no_grep "scope\`, \`invariants\`" "$brief" \
+      "$mode: brief retained the superseded four-subsection enumeration"
     grep -qx "Delivery contract: mode=$mode" "$brief" \
       || fail "$mode: --plan disturbed the machine-readable delivery contract line"
     assert_grep "# Herdr lifecycle declaration - NOT ENABLED" "$brief" \
