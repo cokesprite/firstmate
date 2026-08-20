@@ -6,7 +6,7 @@
 # description, acceptance criteria, and context, and may adjust other sections
 # when the task genuinely deviates (e.g. working an existing external PR instead
 # of shipping a new one).
-# Usage: fm-brief.sh <task-id> <repo-name> --mode <no-mistakes|direct-PR|local-only> [--herdr-lab]
+# Usage: fm-brief.sh <task-id> <repo-name> --mode <no-mistakes|direct-PR|local-only> [--herdr-lab] [--plan <path>]
 #        fm-brief.sh <task-id> <repo-name> --scout [--herdr-lab]
 #        fm-brief.sh <task-id> --secondmate {<project>...|--no-projects}
 #   --scout writes the scout contract instead: the deliverable is a report at
@@ -34,6 +34,14 @@
 #   direct-PR    implement -> push + open PR via gh-axi (no pipeline) -> configured merge authority
 #   local-only   implement on branch, stop and report "ready in branch" (no push/PR);
 #                the configured merge authority approves, firstmate merges to local main
+#   --plan <path> binds the ship task to a captain-approved PLAN (AGENTS.md
+#   section 7's default PLAN-execution path): the path is resolved to absolute,
+#   a missing file is refused, and the brief gains a section that makes the PLAN
+#   required reading, names the drive-plan-to-validated-mr skill as the worker's
+#   execution contract, and requires the worker's MR description to carry a PLAN
+#   Contract section (scope / invariants / evidence / deviation, an explicit
+#   none when there is no deviation). It composes with --mode and --herdr-lab
+#   and is refused on scout and secondmate scaffolds.
 # no-mistakes-prod-only is a registry policy, not a task mode; resolve it to one of
 # the three concrete modes at intake before calling this script.
 # The generated ship brief records the chosen mode as a fixed machine-readable
@@ -89,6 +97,26 @@ resolve_directory_input() {
   printf '%s\n' "$resolved"
 }
 
+# Resolve a --plan file to its absolute physical path: a relative input binds
+# to the caller's cwd (CDPATH ignored) so the recorded path stays valid from
+# the worker's own worktree, and a missing file fails loudly at scaffold time.
+resolve_plan_input() {
+  local path=$1 dir base resolved
+  case "$path" in
+    */*) dir=${path%/*}; base=${path##*/} ;;
+    *) dir=.; base=$path ;;
+  esac
+  resolved=$(CDPATH='' cd -- "$dir" 2>/dev/null && pwd -P) || {
+    echo "error: --plan directory cannot be resolved: $dir" >&2
+    return 1
+  }
+  if [ -z "$base" ] || [ ! -f "$resolved/$base" ]; then
+    echo "error: --plan file not found: $resolved/$base" >&2
+    return 1
+  fi
+  printf '%s/%s\n' "$resolved" "$base"
+}
+
 FM_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 FM_HOME=$(resolve_directory_input FM_HOME "${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}") || exit 1
 if [ -n "${FM_DATA_OVERRIDE:-}" ]; then
@@ -106,6 +134,8 @@ HERDR_LAB=0
 NO_PROJECTS=0
 MODE=
 MODE_SET=0
+PLAN=
+PLAN_SET=0
 POS=()
 want_value=
 for a in "$@"; do
@@ -115,6 +145,7 @@ for a in "$@"; do
     esac
     case "$want_value" in
       mode) MODE=$a; MODE_SET=1 ;;
+      plan) PLAN=$a; PLAN_SET=1 ;;
       *) echo "error: internal parser state for --$want_value" >&2; exit 1 ;;
     esac
     want_value=
@@ -127,6 +158,8 @@ for a in "$@"; do
     --no-projects) NO_PROJECTS=1 ;;
     --mode) want_value=mode ;;
     --mode=*) MODE=${a#--mode=}; MODE_SET=1 ;;
+    --plan) want_value=plan ;;
+    --plan=*) PLAN=${a#--plan=}; PLAN_SET=1 ;;
     # yolo never reaches the worker: it is firstmate's approval authority, not a
     # brief input. Refuse it loudly so it is never silently dropped here and then
     # believed to have been recorded.
@@ -153,6 +186,19 @@ if [ "$KIND" = ship ]; then
 elif [ "$MODE_SET" -eq 1 ]; then
   echo "error: --mode applies only to ship briefs; a scout delivers a report and a secondmate charter is not a delivery contract" >&2
   exit 1
+fi
+
+# --plan binds a ship brief to a captain-approved PLAN; like --mode it is
+# refused where no delivery contract exists rather than silently dropped, and a
+# missing or unresolvable file stops the scaffold before anything is written.
+if [ "$PLAN_SET" -eq 1 ] && [ "$KIND" != ship ]; then
+  echo "error: --plan applies only to ship briefs; a scout delivers a report and a secondmate charter is not a delivery contract" >&2
+  exit 1
+fi
+PLAN_ABS=
+if [ "$PLAN_SET" -eq 1 ]; then
+  [ -n "$PLAN" ] || { echo "error: --plan requires a value" >&2; exit 1; }
+  PLAN_ABS=$(resolve_plan_input "$PLAN") || exit 1
 fi
 ID=${POS[0]}
 
@@ -298,6 +344,20 @@ EOF
 HERDR_SECTION=${HERDR_SECTION%$'\n'}
 fi
 
+# PLAN_BLOCK carries a leading blank line and keeps its trailing newline, so
+# the ship brief reads "{TASK}<blank># Approved PLAN...<blank>$HERDR_SECTION"
+# with --plan set and stays byte-identical to the pre-flag shape without it.
+PLAN_BLOCK=
+if [ "$PLAN_SET" -eq 1 ]; then
+IFS= read -r -d '' PLAN_BLOCK <<EOF || true
+
+# Approved PLAN
+The captain approved the PLAN at \`$PLAN_ABS\`; read it in full before touching code.
+Load and follow \`drive-plan-to-validated-mr\` as the execution contract for this task.
+Your MR description must carry a \`PLAN Contract\` section with \`scope\`, \`invariants\`, \`evidence\`, and \`deviation\` subsections, stating \`none\` explicitly when the MR does not deviate from the PLAN.
+EOF
+fi
+
 if [ "$KIND" = scout ]; then
 cat > "$BRIEF" <<EOF
 You are a crewmate: an autonomous worker agent managed by firstmate. Work on your own; do not wait for a human.
@@ -415,7 +475,7 @@ You are a crewmate: an autonomous worker agent managed by firstmate. Work on you
 
 # Task
 {TASK}
-
+$PLAN_BLOCK
 $HERDR_SECTION
 
 # Setup
