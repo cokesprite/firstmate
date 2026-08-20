@@ -690,6 +690,96 @@ test_scout_and_secondmate_load_decision_hold_policy() {
   pass "fm-brief.sh: investigation and visual-review completions load the shared decision policy"
 }
 
+# --plan binds a ship brief to a captain-approved PLAN (AGENTS.md section 7's
+# default PLAN-execution path): the scaffold resolves the path to absolute,
+# injects the required-reading section and execution contract, composes with
+# every --mode, and leaves the rest of the safety contract intact.
+test_plan_flag_injects_plan_contract_for_every_mode() {
+  local home plan_dir plan_abs id brief mode
+  home="$TMP_ROOT/plan-home"
+  mkdir -p "$home/data"
+  plan_dir="$TMP_ROOT/plans"
+  mkdir -p "$plan_dir"
+  printf '# PLAN fixture\n' > "$plan_dir/PLAN.md"
+  plan_abs=$(cd "$plan_dir" && pwd -P)/PLAN.md
+
+  for mode in no-mistakes direct-PR local-only; do
+    id="brief-plan-$mode"
+    FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" some-proj --mode "$mode" --plan "$plan_dir/PLAN.md" >/dev/null 2>&1 \
+      || fail "--plan brief should scaffold in mode $mode"
+    brief="$home/data/$id/brief.md"
+    assert_grep "# Approved PLAN" "$brief" "$mode: brief missing the Approved PLAN section"
+    assert_grep "The captain approved the PLAN at \`$plan_abs\`; read it in full before touching code." "$brief" \
+      "$mode: brief did not record the absolute PLAN path as required reading"
+    assert_grep "Load and follow \`drive-plan-to-validated-mr\` as the execution contract for this task." "$brief" \
+      "$mode: brief did not name the PLAN execution contract"
+    assert_grep "Your MR description must carry a \`PLAN Contract\` section with \`scope\`, \`invariants\`, \`evidence\`, and \`deviation\` subsections, stating \`none\` explicitly when the MR does not deviate from the PLAN." "$brief" \
+      "$mode: brief did not require the MR PLAN Contract section"
+    grep -qx "Delivery contract: mode=$mode" "$brief" \
+      || fail "$mode: --plan disturbed the machine-readable delivery contract line"
+    assert_grep "# Herdr lifecycle declaration - NOT ENABLED" "$brief" \
+      "$mode: --plan disturbed the Herdr safety declaration"
+    assert_grep "{TASK}" "$brief" "$mode: --plan brief lost the {TASK} placeholder"
+  done
+  pass "fm-brief.sh: --plan injects the PLAN contract and composes with every ship mode"
+}
+
+test_plan_path_resolution_and_refusals() {
+  local home root out status
+  home="$TMP_ROOT/plan-refusal-home"
+  mkdir -p "$home/data"
+  root="$TMP_ROOT/plan-rel"
+  mkdir -p "$root/plans"
+  root=$(cd "$root" && pwd -P)
+  printf '# PLAN fixture\n' > "$root/plans/PLAN.md"
+
+  # A relative --plan path binds to the caller's cwd, ignoring CDPATH, so the
+  # recorded path stays valid from the worker's own worktree.
+  (
+    cd "$root" || exit 1
+    CDPATH=/nonexistent FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-plan-rel some-proj --mode direct-PR --plan plans/PLAN.md >/dev/null 2>&1
+  ) || fail "relative --plan path should scaffold"
+  assert_grep "at \`$root/plans/PLAN.md\`;" "$home/data/brief-plan-rel/brief.md" \
+    "relative --plan path did not resolve to the absolute physical path"
+
+  # A missing PLAN file fails loudly and writes nothing.
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-plan-missing some-proj --mode no-mistakes --plan "$root/plans/NOPE.md" 2>&1)
+  status=$?
+  expect_code 1 "$status" "a missing --plan file must fail"
+  assert_contains "$out" "--plan file not found: $root/plans/NOPE.md" "missing-file refusal did not name the resolved path"
+  assert_absent "$home/data/brief-plan-missing/brief.md" "refused --plan scaffold still wrote a brief"
+
+  # An empty --plan= value is a missing value, not a path.
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-plan-empty some-proj --mode no-mistakes --plan= 2>&1)
+  status=$?
+  expect_code 1 "$status" "an empty --plan= value must fail"
+  assert_contains "$out" "--plan requires a value" "empty --plan= refusal did not explain the contract"
+
+  # --plan followed by another flag is also a missing value.
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-plan-noval some-proj --mode no-mistakes --plan --herdr-lab 2>&1)
+  status=$?
+  expect_code 1 "$status" "--plan without a value must fail"
+  assert_contains "$out" "--plan requires a value" "--plan-without-value refusal did not explain the contract"
+
+  # --plan applies only to ship briefs: a scout delivers a report and a
+  # secondmate charter is not a delivery contract.
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-plan-scout some-proj --scout --plan "$root/plans/PLAN.md" 2>&1)
+  status=$?
+  expect_code 1 "$status" "--plan on a scout brief must fail"
+  assert_contains "$out" "--plan applies only to ship briefs" "scout --plan refusal did not explain why"
+  assert_absent "$home/data/brief-plan-scout/brief.md" "refused scout --plan still wrote a brief"
+  out=$(FM_HOME="$home" FM_SECONDMATE_CHARTER=x "$ROOT/bin/fm-brief.sh" brief-plan-mate --secondmate --no-projects --plan "$root/plans/PLAN.md" 2>&1)
+  status=$?
+  expect_code 1 "$status" "--plan on a secondmate charter must fail"
+  assert_contains "$out" "--plan applies only to ship briefs" "secondmate --plan refusal did not explain why"
+
+  # A brief without --plan carries no PLAN section.
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-plan-none some-proj --mode no-mistakes >/dev/null 2>&1
+  assert_no_grep "# Approved PLAN" "$home/data/brief-plan-none/brief.md" \
+    "brief without --plan gained an Approved PLAN section"
+  pass "fm-brief.sh: --plan resolves relative paths and refuses misuse loudly"
+}
+
 # Scout and secondmate paths still scaffold well-formed briefs.
 test_scout_and_secondmate_scaffold() {
   local brief
@@ -731,4 +821,6 @@ test_secondmate_marked_request_reporting_contract
 test_secondmate_directory_paths_are_absolute_and_output_is_stable
 test_pause_verb_override_renders_all_brief_scaffolds
 test_scout_and_secondmate_load_decision_hold_policy
+test_plan_flag_injects_plan_contract_for_every_mode
+test_plan_path_resolution_and_refusals
 test_scout_and_secondmate_scaffold
