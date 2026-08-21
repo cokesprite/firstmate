@@ -6,7 +6,7 @@
 # description, acceptance criteria, and context, and may adjust other sections
 # when the task genuinely deviates (e.g. working an existing external PR instead
 # of shipping a new one).
-# Usage: fm-brief.sh <task-id> <repo-name> --mode <no-mistakes|direct-PR|local-only> [--herdr-lab] [--plan <path>]
+# Usage: fm-brief.sh <task-id> <repo-name> --mode <no-mistakes|direct-PR|local-only> [--herdr-lab] [--plan <path>] [--plan-evidence <path>]
 #        fm-brief.sh <task-id> <repo-name> --scout [--herdr-lab]
 #        fm-brief.sh <task-id> --secondmate {<project>...|--no-projects}
 #   --scout writes the scout contract instead: the deliverable is a report at
@@ -43,6 +43,14 @@
 #   Evidence / Deviation; the format is owned by reframe-and-plan
 #   references/plan-handoff.md). It composes with --mode and --herdr-lab
 #   and is refused on scout and secondmate scaffolds.
+#   --plan is gated on the dispatch preflight owned by bin/fm-plan-preflight.sh:
+#   a PLAN with a machine-readable contract segment scaffolds only when lint and
+#   rehearsal evidence verify passes (a failed, missing, or stale preflight
+#   refuses the scaffold), while a legacy PLAN without a segment scaffolds with
+#   an explicit not-rehearsed label. The worker's brief carries the preflight
+#   result, the evidence pointer, and the mechanical-amendment boundary.
+#   --plan-evidence <path> points at a non-default rehearsal evidence sidecar
+#   (default: <plan>.preflight.json next to the PLAN file).
 # no-mistakes-prod-only is a registry policy, not a task mode; resolve it to one of
 # the three concrete modes at intake before calling this script.
 # The generated ship brief records the chosen mode as a fixed machine-readable
@@ -137,6 +145,7 @@ MODE=
 MODE_SET=0
 PLAN=
 PLAN_SET=0
+PLAN_EVIDENCE=
 POS=()
 want_value=
 for a in "$@"; do
@@ -147,6 +156,7 @@ for a in "$@"; do
     case "$want_value" in
       mode) MODE=$a; MODE_SET=1 ;;
       plan) PLAN=$a; PLAN_SET=1 ;;
+      plan-evidence) PLAN_EVIDENCE=$a ;;
       *) echo "error: internal parser state for --$want_value" >&2; exit 1 ;;
     esac
     want_value=
@@ -161,6 +171,8 @@ for a in "$@"; do
     --mode=*) MODE=${a#--mode=}; MODE_SET=1 ;;
     --plan) want_value=plan ;;
     --plan=*) PLAN=${a#--plan=}; PLAN_SET=1 ;;
+    --plan-evidence) want_value=plan-evidence ;;
+    --plan-evidence=*) PLAN_EVIDENCE=${a#--plan-evidence=} ;;
     # yolo never reaches the worker: it is firstmate's approval authority, not a
     # brief input. Refuse it loudly so it is never silently dropped here and then
     # believed to have been recorded.
@@ -200,6 +212,59 @@ PLAN_ABS=
 if [ "$PLAN_SET" -eq 1 ]; then
   [ -n "$PLAN" ] || { echo "error: --plan requires a value" >&2; exit 1; }
   PLAN_ABS=$(resolve_plan_input "$PLAN") || exit 1
+fi
+if [ "$PLAN_SET" -eq 0 ] && [ -n "$PLAN_EVIDENCE" ]; then
+  echo "error: --plan-evidence applies only together with --plan" >&2
+  exit 1
+fi
+
+# --plan dispatch preflight: bin/fm-plan-preflight.sh owns the mechanics. A
+# contract-bearing PLAN scaffolds only when lint plus rehearsal-evidence verify
+# passes (a failed, missing, or stale preflight refuses the scaffold before
+# anything is written); a legacy PLAN without a contract segment scaffolds with
+# an explicit not-rehearsed label (backward-compatible, never silently
+# rehearsed).
+PLAN_PREFLIGHT_SECTION=
+if [ "$PLAN_SET" -eq 1 ]; then
+  PLAN_EVIDENCE_ABS=
+  if [ -n "$PLAN_EVIDENCE" ]; then
+    PLAN_EVIDENCE_ABS=$(resolve_plan_input "$PLAN_EVIDENCE") || {
+      echo "error: --plan-evidence cannot be resolved: $PLAN_EVIDENCE" >&2
+      exit 1
+    }
+  fi
+  set +e
+  if [ -n "$PLAN_EVIDENCE_ABS" ]; then
+    PLAN_PREFLIGHT_OUT=$("$FM_ROOT/bin/fm-plan-preflight.sh" verify "$PLAN_ABS" --evidence "$PLAN_EVIDENCE_ABS" 2>&1)
+  else
+    PLAN_PREFLIGHT_OUT=$("$FM_ROOT/bin/fm-plan-preflight.sh" verify "$PLAN_ABS" 2>&1)
+  fi
+  PLAN_PREFLIGHT_RC=$?
+  set -e
+  case "$PLAN_PREFLIGHT_RC" in
+    0)
+      [ -n "$PLAN_EVIDENCE_ABS" ] || PLAN_EVIDENCE_ABS="$PLAN_ABS.preflight.json"
+      PREFLIGHT_BASE=$(printf '%s\n' "$PLAN_PREFLIGHT_OUT" | sed -n 's/^PREFLIGHT: PASS .* base=\([^ ]*\) .*$/\1/p' | head -n 1)
+      IFS= read -r -d '' PLAN_PREFLIGHT_SECTION <<EOF || true
+## PLAN preflight
+Preflight result: PASS - the contract lint and a clean-worktree execution rehearsal of every declared deterministic producer passed against baseline \`$PREFLIGHT_BASE\`; the write-set evidence is \`$PLAN_EVIDENCE_ABS\`. Read it before touching code.
+Only paths inside the PLAN contract's \`allowed_scope.paths\` (which includes every declared producer output) may appear in your diff. If a declared producer writes a path its declaration does not cover, the only continuation without a new captain decision is the proven mechanical amendment: \`$FM_ROOT/bin/fm-plan-preflight.sh amend\` with the PLAN path, \`--producer <id>\`, and each new output as \`--add <path>\` proves the paths are that producer's deterministic generated outputs by identical clean reruns and records the amendment in the PLAN's Amendments record. Declare the same amendment in your MR's PLAN Contract section. Any other out-of-contract write, or an amendment the tool refuses, is \`needs-decision\` (stop-and-return), never a unilateral scope widening.
+EOF
+      PLAN_PREFLIGHT_SECTION=${PLAN_PREFLIGHT_SECTION%$'\n'}
+      ;;
+    3)
+      IFS= read -r -d '' PLAN_PREFLIGHT_SECTION <<'EOF' || true
+## PLAN preflight
+Preflight result: LEGACY - this PLAN has no machine-readable plan-contract segment, so contract lint and execution rehearsal do not apply and nothing about it may be treated as rehearsed. Any scope surprise is `needs-decision` (stop-and-return); there is no mechanical amendment path for a legacy PLAN.
+EOF
+      PLAN_PREFLIGHT_SECTION=${PLAN_PREFLIGHT_SECTION%$'\n'}
+      ;;
+    *)
+      printf '%s\n' "$PLAN_PREFLIGHT_OUT" >&2
+      echo "error: --plan dispatch preflight failed for $PLAN_ABS (see the gate output above). A contract-bearing PLAN needs a passing rehearsal before scaffolding: $FM_ROOT/bin/fm-plan-preflight.sh rehearse '$PLAN_ABS' --repo <target-clone>. Repair the PLAN declaration or prove a mechanical amendment instead; a legacy PLAN without a plan-contract block scaffolds with an explicit not-rehearsed label." >&2
+      exit 1
+      ;;
+  esac
 fi
 ID=${POS[0]}
 
@@ -356,6 +421,8 @@ IFS= read -r -d '' PLAN_BLOCK <<EOF || true
 The captain approved the PLAN at \`$PLAN_ABS\`; read it in full before touching code.
 Load and follow \`drive-plan-to-validated-mr\` as the execution contract for this task.
 Your MR description must carry a '## PLAN Contract' self-declaration section (Plan / Evidence / Deviation; 'none' allowed for Deviation); the format is owned by the PLAN contract schema owner (reframe-and-plan references/plan-handoff.md).
+
+$PLAN_PREFLIGHT_SECTION
 EOF
 fi
 
