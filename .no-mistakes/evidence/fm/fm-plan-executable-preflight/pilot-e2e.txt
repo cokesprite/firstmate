@@ -1,0 +1,30 @@
+== STEP 1: rehearse the pilot omission PLAN (two declared outputs, third generated dir undeclared) ==
+$ bin/fm-plan-preflight.sh rehearse plans/PLAN2.md --repo <clone>
+LINT: PASS plan_id=pilot-openapi contract_version=1 producers=1 allowed_paths=4
+UNDECLARED_WRITE: openapi wrote docs/openapi-platform-simple/pet.simple.openapi.json (covered by neither allowed_scope.paths nor the producer's declared outputs)
+REHEARSAL: FAIL plan_id=pilot-openapi base=main@5194663026c6c8447c120def03a10005cd368698 undeclared=1 evidence=/private/tmp/fm-preflight-demo/plans/PLAN2.md.preflight.json
+error: closure violation: every producer write must be covered by allowed_scope.paths or the producer's declared outputs; fix the PLAN declaration or prove a mechanical amendment (fm-plan-preflight.sh amend) before dispatch
+exit=5
+
+== STEP 2: verify refuses dispatch on the failed evidence ==
+$ bin/fm-plan-preflight.sh verify plans/PLAN2.md
+LINT: PASS plan_id=pilot-openapi contract_version=1 producers=1 allowed_paths=4
+UNDECLARED_WRITE: openapi wrote docs/openapi-platform-simple/pet.simple.openapi.json (covered by neither allowed_scope.paths nor the producer's declared outputs)
+error: rehearsal evidence verdict is fail; repair the declaration (or prove a mechanical amendment) and re-rehearse before dispatch
+exit=5
+
+== STEP 3: proven mechanical amendment declares the exact third output ==
+$ bin/fm-plan-preflight.sh amend plans/PLAN2.md --producer openapi --add docs/openapi-platform-simple/**
+LINT: PASS plan_id=pilot-openapi contract_version=1 producers=1 allowed_paths=4
+AMENDMENT: PASS plan_id=pilot-openapi producer=openapi added=docs/openapi-platform-simple/** plan_sha256=c0b41ae6b271daeec32268e084e0d4f5fba1f501992c38b5c3a5bdc3ee9e4cdf evidence=/private/tmp/fm-preflight-demo/plans/PLAN2.md.preflight.json
+Record this amendment in the MR's '## PLAN Contract' section (Plan / Evidence / Deviation), e.g.:
+
+  ### Amendment
+  - mechanical producer-output closure: producer=openapi added=docs/openapi-platform-simple/** (fm-plan-preflight amend, 2026-08-22; proven by identical clean reruns at 5194663026c6c8447c120def03a10005cd368698)
+exit=0
+
+== STEP 4: the amended PLAN now verifies for dispatch ==
+$ bin/fm-plan-preflight.sh verify plans/PLAN2.md
+LINT: PASS plan_id=pilot-openapi contract_version=1 producers=1 allowed_paths=5
+PREFLIGHT: PASS plan_id=pilot-openapi contract_version=1 base=main@5194663026c6c8447c120def03a10005cd368698 producers=1 evidence=/private/tmp/fm-preflight-demo/plans/PLAN2.md.preflight.json
+exit=0

@@ -1,0 +1,68 @@
+== Evidence sidecar (plan-contract binding + write-set + amendment record) ==
+{
+  "amendments": [
+    {
+      "added_outputs": [
+        "docs/openapi-platform-simple/**"
+      ],
+      "date": "2026-08-22T06:33:27Z",
+      "kind": "mechanical",
+      "plan_sha256_after": "c0b41ae6b271daeec32268e084e0d4f5fba1f501992c38b5c3a5bdc3ee9e4cdf",
+      "producer": "openapi"
+    }
+  ],
+  "closure": "pass",
+  "contract_version": 1,
+  "plan_id": "pilot-openapi",
+  "plan_sha256": "c0b41ae6b271daeec32268e084e0d4f5fba1f501992c38b5c3a5bdc3ee9e4cdf",
+  "preflight_version": 1,
+  "producers": [
+    {
+      "argv": [
+        "python3",
+        "scripts/gen_openapi.py"
+      ],
+      "closure": "pass",
+      "declared_outputs": [
+        "docs/openapi.json",
+        "docs/openapi-by-path/**",
+        "docs/openapi-platform-simple/**"
+      ],
+      "id": "openapi",
+      "observed_writes": [
+        "docs/openapi-by-path/pet.openapi.json",
+        "docs/openapi-platform-simple/pet.simple.openapi.json",
+        "docs/openapi.json"
+      ],
+      "undeclared_writes": []
+    }
+  ],
+  "rehearsed_at": "2026-08-22T06:33:26Z",
+  "repo": {
+    "base_ref": "main",
+    "base_sha": "5194663026c6c8447c120def03a10005cd368698",
+    "path": "/private/tmp/fm-preflight-demo/repo"
+  },
+  "verdict": "pass"
+}
+
+== Amended PLAN: the third output now declared in allowed_scope.paths + producer outputs + Amendments line ==
+  paths:
+    - src/api.py
+    - docs/openapi.json
+    - docs/openapi-by-path/**
+    - tests/**
+    - docs/openapi-platform-simple/**
+invariants:
+...
+producers:
+  - id: openapi
+    argv:
+      - python3
+      - scripts/gen_openapi.py
+    outputs:
+      - docs/openapi.json
+      - docs/openapi-by-path/**
+      - docs/openapi-platform-simple/**
+```
+Amendments: 2026-08-22 mechanical producer-output closure producer=openapi added=docs/openapi-platform-simple/** (fm-plan-preflight amend; pre-authorized, no captain round)

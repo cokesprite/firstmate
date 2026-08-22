@@ -1,0 +1,18 @@
+== STEP 5 (redo): dispatch handoff refuses a PLAN whose preflight FAILED (pilot omission) ==
+$ FM_HOME=... bin/fm-brief.sh brief-x repo --mode no-mistakes --plan PLANFAIL.md
+LINT: PASS plan_id=pilot-openapi contract_version=1 producers=1 allowed_paths=4
+UNDECLARED_WRITE: openapi wrote docs/openapi-platform-simple/pet.simple.openapi.json (covered by neither allowed_scope.paths nor the producer's declared outputs)
+error: rehearsal evidence verdict is fail; repair the declaration (or prove a mechanical amendment) and re-rehearse before dispatch
+error: --plan dispatch preflight failed for /private/tmp/fm-preflight-demo/plans/PLANFAIL.md (see the gate output above). A contract-bearing PLAN needs a passing rehearsal before scaffolding: /Users/chunchen/.no-mistakes/worktrees/8a3aa331c6e1/01M0KXZQW3M8JVJB912AQY2B01/bin/fm-plan-preflight.sh rehearse '/private/tmp/fm-preflight-demo/plans/PLANFAIL.md' --repo <target-clone>. Repair the PLAN declaration or prove a mechanical amendment instead; a legacy PLAN without a plan-contract block scaffolds with an explicit not-rehearsed label.
+exit=1
+brief written? YES
+
+== STEP 5b: missing evidence also refuses before any brief is written ==
+LINT: PASS plan_id=nomiss contract_version=1 producers=1 allowed_paths=4
+error: missing rehearsal evidence: /private/tmp/fm-preflight-demo/plans/NOMISS.md.preflight.json (run: fm-plan-preflight.sh rehearse '/private/tmp/fm-preflight-demo/plans/NOMISS.md' --repo <target-clone>)
+error: --plan dispatch preflight failed for /private/tmp/fm-preflight-demo/plans/NOMISS.md (see the gate output above). A contract-bearing PLAN needs a passing rehearsal before scaffolding: /Users/chunchen/.no-mistakes/worktrees/8a3aa331c6e1/01M0KXZQW3M8JVJB912AQY2B01/bin/fm-plan-preflight.sh rehearse '/private/tmp/fm-preflight-demo/plans/NOMISS.md' --repo <target-clone>. Repair the PLAN declaration or prove a mechanical amendment instead; a legacy PLAN without a plan-contract block scaffolds with an explicit not-rehearsed label.
+exit=1
+brief written? NO
+== STEP 5 (clean): dispatch handoff refuses a failed preflight; no brief is written ==
+exit=1
+brief written? NO
