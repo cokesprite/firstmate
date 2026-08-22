@@ -48,7 +48,9 @@
 #   rehearsal evidence verify passes (a failed, missing, or stale preflight
 #   refuses the scaffold), while a legacy PLAN without a segment scaffolds with
 #   an explicit not-rehearsed label. The worker's brief carries the preflight
-#   result, the evidence pointer, and the mechanical-amendment boundary.
+#   result, the evidence pointer, and the mechanical-amendment boundary; a
+#   contract that declares no deterministic producers carries the distinct
+#   PASS-NO-PRODUCERS label (dispatchable, never a rehearsal claim).
 #   --plan-evidence <path> points at a non-default rehearsal evidence sidecar
 #   (default: <plan>.preflight.json next to the PLAN file).
 # no-mistakes-prod-only is a registry policy, not a task mode; resolve it to one of
@@ -244,13 +246,21 @@ if [ "$PLAN_SET" -eq 1 ]; then
   case "$PLAN_PREFLIGHT_RC" in
     0)
       [ -n "$PLAN_EVIDENCE_ABS" ] || PLAN_EVIDENCE_ABS="$PLAN_ABS.preflight.json"
-      PREFLIGHT_BASE=$(printf '%s\n' "$PLAN_PREFLIGHT_OUT" | sed -n 's/^PREFLIGHT: PASS .* base=\([^ ]*\) .*$/\1/p' | head -n 1)
-      IFS= read -r -d '' PLAN_PREFLIGHT_SECTION <<EOF || true
+      if printf '%s\n' "$PLAN_PREFLIGHT_OUT" | grep -q '^PREFLIGHT: PASS-NO-PRODUCERS '; then
+        IFS= read -r -d '' PLAN_PREFLIGHT_SECTION <<EOF || true
+## PLAN preflight
+Preflight result: PASS-NO-PRODUCERS - the contract lint passed and the target baseline is bound, but this PLAN declares no deterministic producers, so no execution rehearsal ran; nothing about it may be treated as rehearsed. If execution discovers a generator the PLAN did not declare, that is \`needs-decision\` (stop-and-return). The evidence sidecar is \`$PLAN_EVIDENCE_ABS\`.
+EOF
+        PLAN_PREFLIGHT_SECTION=${PLAN_PREFLIGHT_SECTION%$'\n'}
+      else
+        PREFLIGHT_BASE=$(printf '%s\n' "$PLAN_PREFLIGHT_OUT" | sed -n 's/^PREFLIGHT: PASS .* base=\([^ ]*\) .*$/\1/p' | head -n 1)
+        IFS= read -r -d '' PLAN_PREFLIGHT_SECTION <<EOF || true
 ## PLAN preflight
 Preflight result: PASS - the contract lint and a clean-worktree execution rehearsal of every declared deterministic producer passed against baseline \`$PREFLIGHT_BASE\`; the write-set evidence is \`$PLAN_EVIDENCE_ABS\`. Read it before touching code.
 Only paths inside the PLAN contract's \`allowed_scope.paths\` (which includes every declared producer output) may appear in your diff. If a declared producer writes a path its declaration does not cover, the only continuation without a new captain decision is the proven mechanical amendment: \`$FM_ROOT/bin/fm-plan-preflight.sh amend\` with the PLAN path, \`--producer <id>\`, and each new output as \`--add <path>\` proves the paths are that producer's deterministic generated outputs by identical clean reruns and records the amendment in the PLAN's Amendments record. Declare the same amendment in your MR's PLAN Contract section. Any other out-of-contract write, or an amendment the tool refuses, is \`needs-decision\` (stop-and-return), never a unilateral scope widening.
 EOF
-      PLAN_PREFLIGHT_SECTION=${PLAN_PREFLIGHT_SECTION%$'\n'}
+        PLAN_PREFLIGHT_SECTION=${PLAN_PREFLIGHT_SECTION%$'\n'}
+      fi
       ;;
     3)
       IFS= read -r -d '' PLAN_PREFLIGHT_SECTION <<'EOF' || true

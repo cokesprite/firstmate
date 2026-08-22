@@ -40,6 +40,8 @@ PREFLIGHT: PASS plan_id=pilot-openapi contract_version=1 base=main@<sha> produce
 
 `bin/fm-brief.sh --plan` enforces the same gate at the dispatch handoff: a contract-bearing PLAN with missing or failed evidence is refused before any brief is written, a passing PLAN's brief carries `Preflight result: PASS` plus the evidence pointer and the amendment boundary, and a prose-only PLAN scaffolds with `Preflight result: LEGACY` (never labeled rehearsed).
 
+A contract-bearing PLAN that declares no deterministic producers is dispatchable but explicitly never rehearsed: `rehearse` and `verify` record and print the distinct `pass-no-producers` verdict with an empty producers list and state that no execution rehearsal ran, and the brief renders `Preflight result: PASS-NO-PRODUCERS` - never the rehearsed `PASS` claim.
+
 ## Guarantee map
 
 | Guarantee | Regression proof |
@@ -49,4 +51,5 @@ PREFLIGHT: PASS plan_id=pilot-openapi contract_version=1 base=main@<sha> produce
 | Closure also fails on unrelated handwritten/source writes, dirty baselines, baseline drift, identity drift, and malformed evidence | `tests/fm-plan-preflight.test.sh` (handwritten, dirty/drift, identity) |
 | The mechanical amendment is machine-proven (declared producer, identical clean reruns, full closure) and recorded in the PLAN and evidence; every other class is refused | `tests/fm-plan-preflight.test.sh` (pilot repair, amendment refusals) |
 | Legacy PLANs get an explicit never-rehearsed result everywhere | `tests/fm-plan-preflight.test.sh` (legacy results), `tests/fm-brief.test.sh` (preflight gate) |
+| A producer-less contract is dispatchable but never claimed rehearsed (distinct pass-no-producers verdict, empty producers list, no execution rehearsal) | `tests/fm-plan-preflight.test.sh` (zero-producer contract), `tests/fm-brief.test.sh` (zero-producer brief) |
 | The dispatch handoff refuses an applicable failed/missing preflight and carries the result into the worker's brief | `tests/fm-brief.test.sh` (preflight gate binds the brief) |

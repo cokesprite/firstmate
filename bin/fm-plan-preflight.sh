@@ -24,6 +24,9 @@
 #       filesystem write-set of each run, and write the evidence sidecar
 #       (default: <plan.md>.preflight.json next to the PLAN). A closure
 #       failure still writes evidence (verdict "fail") so verify can report it.
+#       A contract with no declared producers still binds the baseline and
+#       writes evidence with verdict "pass-no-producers" (dispatchable, never
+#       a rehearsal claim).
 #   fm-plan-preflight.sh verify <plan.md> [--repo <path>] [--evidence <path>]
 #       Lint, then validate existing evidence: PLAN identity (plan_id,
 #       contract_version, plan sha256), producer inventory, baseline freshness
@@ -120,6 +123,15 @@
 # - Closure: every observed path of a producer must be covered by
 #   allowed_scope.paths or that producer's declared outputs. Any uncovered path
 #   is an UNDECLARED_WRITE and fails the rehearsal before dispatch.
+# - A contract-bearing PLAN that declares no deterministic producers is never
+#   stamped rehearsed: rehearse still resolves the baseline, asserts the
+#   isolated worktree, and writes evidence, but with verdict
+#   "pass-no-producers" (closure "pass", empty producers list) and a distinct
+#   REHEARSAL line stating that no execution rehearsal ran. It is dispatchable
+#   but is never a rehearsal claim. A PLAN whose execution actually runs
+#   generators must declare them; a generator discovered at execution that the
+#   PLAN never declared is a needs-decision stop-and-return, exactly the
+#   pilot's failure class.
 #
 # Evidence schema (preflight_version 1, JSON sidecar)
 # ---------------------------------------------------
@@ -129,7 +141,11 @@
 #   rehearsed_at: <utc iso8601>
 #   producers: [ { id, argv, declared_outputs, observed_writes,
 #                  undeclared_writes, closure } ]
-#   closure, verdict: pass | fail
+#   closure, verdict: pass | fail | pass-no-producers
+#   "pass-no-producers" (closure "pass", empty producers list) means the
+#   contract lint passed and the target baseline is bound but no deterministic
+#   producers were declared, so no execution rehearsal ran; it is dispatchable
+#   but is never a rehearsal claim.
 #   amendments: [ { date, producer, added_outputs, plan_sha256_after,
 #                   kind: "mechanical" } ]       (appended by amend)
 #
@@ -861,13 +877,17 @@ base_sha = req_str(repo, "base_sha")
 rehearsed_at = req_str(doc, "rehearsed_at")
 verdict = doc.get("verdict")
 closure = doc.get("closure")
-if verdict not in ("pass", "fail"):
-    bad("verdict must be pass|fail")
+if verdict not in ("pass", "fail", "pass-no-producers"):
+    bad("verdict must be pass|fail|pass-no-producers")
 if closure not in ("pass", "fail"):
     bad("closure must be pass|fail")
 producers = doc.get("producers")
 if not isinstance(producers, list):
     bad("producers must be a list")
+if verdict == "pass-no-producers" and producers:
+    bad("pass-no-producers verdict requires an empty producers list")
+if verdict == "pass" and not producers:
+    bad("pass verdict requires at least one recorded producer")
 seen = set()
 lines = []
 def str_list(p, k):
@@ -1262,6 +1282,9 @@ EOF
   remove_rehearsal_worktree "$repo" "$wt"
 
   local verdict=$overall_closure
+  if [ "$NPROD" -eq 0 ]; then
+    verdict=pass-no-producers
+  fi
   local now
   now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   {
@@ -1277,6 +1300,12 @@ EOF
   } >> "$bundle"
   write_evidence "$bundle" "$evidence" || exit 4
 
+  if [ "$NPROD" -eq 0 ]; then
+    printf 'REHEARSAL: PASS-NO-PRODUCERS plan_id=%s base=%s@%s producers=0 evidence=%s\n' \
+      "$PLAN_ID" "$base_ref" "$base_sha" "$evidence"
+    printf 'No deterministic producers were declared, so no execution rehearsal ran; this PLAN is dispatchable but is not a rehearsed PASS.\n'
+    return 0
+  fi
   if [ "$overall_closure" = pass ]; then
     printf 'REHEARSAL: PASS plan_id=%s base=%s@%s producers=%s evidence=%s\n' \
       "$PLAN_ID" "$base_ref" "$base_sha" "$NPROD" "$evidence"
@@ -1378,7 +1407,7 @@ cmd_verify() {
   fi
 
   # Recorded verdict plus closure recomputed from the recorded write-set.
-  if [ "$EV_VERDICT" != "pass" ] || [ "$EV_CLOSURE" != "pass" ]; then
+  if { [ "$EV_VERDICT" != "pass" ] && [ "$EV_VERDICT" != "pass-no-producers" ]; } || [ "$EV_CLOSURE" != "pass" ]; then
     i=1
     while [ "$i" -le "$EV_NPROD" ]; do
       if [ -n "${EV_PROD_UNDECLARED[$i]}" ]; then
@@ -1412,8 +1441,14 @@ EOF
     i=$((i + 1))
   done
 
-  printf 'PREFLIGHT: PASS plan_id=%s contract_version=%s base=%s@%s producers=%s evidence=%s\n' \
-    "$PLAN_ID" "$CV" "$EV_BASE_REF" "$EV_BASE_SHA" "$EV_NPROD" "$evidence"
+  if [ "$EV_VERDICT" = "pass-no-producers" ]; then
+    printf 'PREFLIGHT: PASS-NO-PRODUCERS plan_id=%s contract_version=%s base=%s@%s producers=0 evidence=%s\n' \
+      "$PLAN_ID" "$CV" "$EV_BASE_REF" "$EV_BASE_SHA" "$evidence"
+    printf 'No deterministic producers were declared, so no execution rehearsal ran; this PLAN is dispatchable but is not a rehearsed PASS.\n'
+  else
+    printf 'PREFLIGHT: PASS plan_id=%s contract_version=%s base=%s@%s producers=%s evidence=%s\n' \
+      "$PLAN_ID" "$CV" "$EV_BASE_REF" "$EV_BASE_SHA" "$EV_NPROD" "$evidence"
+  fi
   return 0
 }
 

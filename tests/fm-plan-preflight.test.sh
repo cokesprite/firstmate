@@ -95,6 +95,30 @@ seg_producer() {
   done
 }
 
+# seg_noprod [plan_id]: a contract-bearing segment with NO producers block.
+seg_noprod() {
+  printf '%s\n' \
+    'contract_version: 1' \
+    "plan_id: ${1:-noprod}" \
+    'plan_status: approved' \
+    'automation_ready: true' \
+    'open_decisions:' \
+    '  product: 0' \
+    '  scope: 0' \
+    '  architecture: 0' \
+    '  acceptance_semantics: 0' \
+    'planning_critical_evidence_gaps: 0' \
+    'allowed_scope:' \
+    '  paths:' \
+    '    - src/api.py' \
+    '    - tests/**' \
+    'invariants:' \
+    '  - I1' \
+    'proof_obligations:' \
+    '  merge:' \
+    '    - PO-1'
+}
+
 # mk_custom_plan <file> <segment-text>
 mk_custom_plan() {
   local file=$1 seg=$2
@@ -468,6 +492,35 @@ test_plan_identity_and_evidence_mismatch() {
   pass "fm-plan-preflight.sh: PLAN identity and evidence mismatch fail closed"
 }
 
+test_zero_producer_contract_never_claimed_rehearsed() {
+  local d="$TMP_ROOT/noprod"
+  mkdir -p "$d"
+  mk_pilot_repo "$d/repo"
+  mk_custom_plan "$d/PLAN.md" "$(seg_noprod noprod)"
+
+  run_tool "$TOOL" lint "$d/PLAN.md"
+  expect_code 0 "$RC" "a zero-producer contract lints clean"
+  assert_contains "$OUT" "LINT: PASS plan_id=noprod contract_version=1 producers=0" "lint reports zero producers"
+
+  run_tool "$TOOL" rehearse "$d/PLAN.md" --repo "$d/repo"
+  expect_code 0 "$RC" "a zero-producer rehearsal still runs and exits 0"
+  assert_contains "$OUT" "REHEARSAL: PASS-NO-PRODUCERS plan_id=noprod" "rehearsal prints the distinct no-producers line"
+  assert_contains "$OUT" "no execution rehearsal ran" "rehearsal states no rehearsal ran"
+  assert_not_contains "$OUT" "REHEARSAL: PASS plan_id=noprod" "zero-producer rehearsal never prints the producer-bearing PASS line"
+  assert_present "$d/PLAN.md.preflight.json" "zero-producer rehearsal still writes evidence"
+  local evidence
+  evidence=$(cat "$d/PLAN.md.preflight.json")
+  assert_contains "$evidence" '"verdict": "pass-no-producers"' "evidence verdict is pass-no-producers"
+  assert_contains "$evidence" '"producers": []' "evidence records an empty producers list"
+
+  run_tool "$TOOL" verify "$d/PLAN.md"
+  expect_code 0 "$RC" "zero-producer evidence verifies dispatchable"
+  assert_contains "$OUT" "PREFLIGHT: PASS-NO-PRODUCERS plan_id=noprod" "verify prints the distinct no-producers line"
+  assert_contains "$OUT" "producers=0" "verify reports zero producers"
+  assert_not_contains "$OUT" "PREFLIGHT: PASS plan_id=noprod" "zero-producer verify never prints the producer-bearing PASS line"
+  pass "fm-plan-preflight.sh: a zero-producer contract is dispatchable but never claimed rehearsed"
+}
+
 test_legacy_plan_results() {
   local d="$TMP_ROOT/legacy"
   mkdir -p "$d"
@@ -568,6 +621,7 @@ test_rehearse_pass_verify_and_isolation
 test_pilot_omission_fails_before_dispatch_then_passes
 test_unrelated_handwritten_write_fails_closure
 test_dirty_baseline_and_drift_refusals
+test_zero_producer_contract_never_claimed_rehearsed
 test_plan_identity_and_evidence_mismatch
 test_legacy_plan_results
 test_amend_proves_and_records_the_pilot_repair

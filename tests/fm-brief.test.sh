@@ -902,6 +902,66 @@ EOF
   pass "fm-brief.sh: --plan is gated on the dispatch preflight"
 }
 
+# A contract-bearing PLAN that declares no deterministic producers is
+# dispatchable but never claimed rehearsed: the brief carries the distinct
+# PASS-NO-PRODUCERS verdict wording, never the producer-bearing rehearsed PASS.
+test_plan_preflight_gate_zero_producer_brief() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    pass "fm-brief.sh: zero-producer preflight brief test skipped (python3 not found)"
+    return 0
+  fi
+  local home repo plans brief out status
+  home="$TMP_ROOT/plan-preflight-noprod-home"
+  repo="$TMP_ROOT/plan-preflight-noprod-repo"
+  plans="$TMP_ROOT/plan-preflight-noprod-plans"
+  mkdir -p "$home/data" "$repo/src" "$plans"
+  repo=$(cd "$repo" && pwd -P)
+  plans=$(cd "$plans" && pwd -P)
+  printf 'print("api")\n' > "$repo/src/api.py"
+  git -C "$repo" init -q -b main
+  git -C "$repo" add -A
+  git -C "$repo" -c user.name='Firstmate Tests' -c user.email='tests@example.invalid' commit -qm initial
+
+  cat > "$plans/PLANNOPROD.md" <<'EOF'
+# PLAN fixture
+
+```plan-contract
+contract_version: 1
+plan_id: brief-noprod
+plan_status: approved
+automation_ready: true
+open_decisions:
+  product: 0
+  scope: 0
+  architecture: 0
+  acceptance_semantics: 0
+planning_critical_evidence_gaps: 0
+allowed_scope:
+  paths:
+    - src/api.py
+    - tests/**
+invariants:
+  - I1
+proof_obligations:
+  merge:
+    - PO-1
+```
+EOF
+
+  "$ROOT/bin/fm-plan-preflight.sh" rehearse "$plans/PLANNOPROD.md" --repo "$repo" >/dev/null 2>&1 \
+    || fail "the zero-producer rehearsal should pass"
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-pf-noprod some-proj --mode no-mistakes --plan "$plans/PLANNOPROD.md" >/dev/null 2>&1; status=$?
+  expect_code 0 "$status" "a zero-producer passing preflight scaffolds"
+  brief="$home/data/brief-pf-noprod/brief.md"
+  assert_grep "## PLAN preflight" "$brief" "zero-producer brief carries the preflight section"
+  assert_grep "Preflight result: PASS-NO-PRODUCERS" "$brief" "zero-producer brief states the distinct verdict"
+  assert_grep "no execution rehearsal ran" "$brief" "zero-producer brief states no rehearsal ran"
+  assert_grep "nothing about it may be treated as rehearsed" "$brief" "zero-producer brief forbids the rehearsed claim"
+  assert_grep "The evidence sidecar is \`$plans/PLANNOPROD.md.preflight.json\`" "$brief" "zero-producer brief still points at the evidence"
+  assert_no_grep "Preflight result: PASS -" "$brief" "zero-producer brief never claims a rehearsed PASS"
+  pass "fm-brief.sh: zero-producer PLAN brief carries PASS-NO-PRODUCERS, never a rehearsed PASS"
+}
+
 test_scout_and_secondmate_scaffold() {
   local brief
   FM_HOME="$BRIEF_HOME" "$ROOT/bin/fm-brief.sh" brief-scout-q6 alpha --scout >/dev/null 2>&1 \
@@ -945,4 +1005,5 @@ test_scout_and_secondmate_load_decision_hold_policy
 test_plan_flag_injects_plan_contract_for_every_mode
 test_plan_path_resolution_and_refusals
 test_plan_preflight_gate_binds_the_brief
+test_plan_preflight_gate_zero_producer_brief
 test_scout_and_secondmate_scaffold
