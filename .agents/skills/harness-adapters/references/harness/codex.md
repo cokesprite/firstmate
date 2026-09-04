@@ -28,6 +28,13 @@ That scope is load-bearing because a leading `$` commonly starts ordinary text s
 An explicit `session:window` target has no metadata, so its harness is unknown and uses the non-Codex fast path.
 This is why `$no-mistakes` reaches a Codex worker instead of being consumed by the popup.
 
+## Worker launch
+
+Every fleet codex worker (crewmate, scout, or secondmate) launches with inline `env CODEX_HOME="${CODEX_HOME:-$HOME/.codex-fleet}"` in the launch command.
+Workers therefore read config, credentials, and session state from the isolated fleet store `~/.codex-fleet`, never the captain's personal `~/.codex`; an operator-set `CODEX_HOME` in the pane environment still wins.
+The inline env is required because panes are created by the long-lived tmux/herdr server and inherit its startup environment, not firstmate's process environment.
+`launch_template()` in `../../../bin/fm-spawn.sh` owns the exact launch literal and rationale.
+
 ## Primary integration
 
 The primary integration was verified on 2026-07-08 with codex-cli 0.142.1.
