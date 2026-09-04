@@ -434,6 +434,42 @@ test_codex_omits_invalid_max_effort() {
   pass "codex omits unsupported max effort instead of passing a bad config value"
 }
 
+test_codex_launch_injects_fleet_codex_home() {
+  local rec id out status launch stub_bin pane_home got
+  id=profile-codex-home-z4b
+  rec=$(make_spawn_case profile-codex-home codex "$id")
+  read_case_record "$rec"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
+  status=$?
+  expect_code 0 "$status" "codex spawn should succeed"
+  launch=$(cat "$LAUNCH_LOG")
+  # shellcheck disable=SC2016 # The pinned launch prefix is literal: ${CODEX_HOME} expands in the crewmate pane, not here.
+  assert_contains "$launch" 'env CODEX_HOME="${CODEX_HOME:-$HOME/.codex-fleet}" codex' \
+    "codex launch did not inject the fleet CODEX_HOME inline env"
+
+  # Prove the pane-side expansion semantics by executing the emitted launch
+  # line for real with a stub codex that reports the CODEX_HOME it receives:
+  # an operator-set value must win, and an unset value must fall back to the
+  # fleet store at $HOME/.codex-fleet.
+  stub_bin=$CASE_DIR/stub-bin
+  mkdir -p "$stub_bin"
+  cat > "$stub_bin/codex" <<'SH'
+#!/usr/bin/env bash
+printf '%s' "${CODEX_HOME:-UNSET}"
+SH
+  chmod +x "$stub_bin/codex"
+  pane_home=$CASE_DIR/pane-home
+
+  got=$(HOME="$pane_home" PATH="$stub_bin:$PATH" env -u CODEX_HOME bash -c "$launch")
+  [ "$got" = "$pane_home/.codex-fleet" ] \
+    || fail "unset CODEX_HOME did not fall back to the fleet store"$'\n'"expected: $pane_home/.codex-fleet"$'\n'"actual:   $got"
+  got=$(HOME="$pane_home" PATH="$stub_bin:$PATH" CODEX_HOME=/operator/codex-home bash -c "$launch")
+  [ "$got" = /operator/codex-home ] \
+    || fail "operator-set CODEX_HOME did not win over the fleet default"$'\n'"actual: $got"
+  pass "codex launch injects CODEX_HOME: operator value wins, unset falls back to ~/.codex-fleet"
+}
+
 test_grok_threads_model_and_reasoning_effort() {
   local rec id out status launch
   id=profile-grok-z5
@@ -809,6 +845,7 @@ test_active_dispatch_profile_allows_raw_launch_command
 test_claude_threads_model_and_effort
 test_codex_threads_model_and_effort
 test_codex_omits_invalid_max_effort
+test_codex_launch_injects_fleet_codex_home
 test_grok_threads_model_and_reasoning_effort
 test_grok_omits_invalid_max_reasoning_effort
 test_grok_omits_invalid_xhigh_reasoning_effort

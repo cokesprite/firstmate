@@ -1278,11 +1278,22 @@ launch_template() {
     # leaves the other in force. Both are per-launch, scoped to this invocation only,
     # and never touch the captain's global ~/.claude/settings.json.
     claude) printf '%s' 'CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false CLAUDE_CODE_SEND_FEEDBACK=0 claude --dangerously-skip-permissions --settings '\''{"feedbackDrafts":"off"}'\'' __MODELFLAG____EFFORTFLAG__"$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+    # Fleet codex workers launch against the isolated fleet store ~/.codex-fleet
+    # (the operator pins the APISIX native-responses channel there), never the
+    # personal ~/.codex. CODEX_HOME must be injected into the launch command
+    # itself: crewmate panes are created by the long-lived tmux/herdr server and
+    # inherit ITS startup environment, not firstmate's process environment
+    # (docs/herdr-backend.md: Herdr passes its server startup environment to
+    # every later pane; tmux behaves the same), so a firstmate-side export
+    # cannot reach the pane. An operator-set CODEX_HOME in the pane environment
+    # still wins; the parameter expansion only supplies the fleet default. Same
+    # inline-env pattern as muse's XDG_CONFIG_HOME and the CLAUDE_CONFIG_DIR
+    # forward below.
     codex)
       if [ "$kind" = secondmate ]; then
-        printf '%s' 'codex __MODELFLAG____EFFORTFLAG__--dangerously-bypass-approvals-and-sandbox "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
+        printf '%s' 'env CODEX_HOME="${CODEX_HOME:-$HOME/.codex-fleet}" codex __MODELFLAG____EFFORTFLAG__--dangerously-bypass-approvals-and-sandbox "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
       else
-        printf '%s' 'codex __MODELFLAG____EFFORTFLAG__--dangerously-bypass-approvals-and-sandbox -c "notify=[\"bash\",\"-c\",\"touch __TURNEND__\"]" "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
+        printf '%s' 'env CODEX_HOME="${CODEX_HOME:-$HOME/.codex-fleet}" codex __MODELFLAG____EFFORTFLAG__--dangerously-bypass-approvals-and-sandbox -c "notify=[\"bash\",\"-c\",\"touch __TURNEND__\"]" "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
       fi
       ;;
     opencode) printf '%s' 'OPENCODE_CONFIG_CONTENT='\''{"permission":{"*":"allow"}}'\'' opencode __MODELFLAG__--prompt "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;

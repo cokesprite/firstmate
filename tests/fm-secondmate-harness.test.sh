@@ -856,8 +856,9 @@ test_spawn_explicit_harness_does_not_inherit_secondmate_harness_tokens() {
   [ "$(meta_field "$meta" model)" = default ] || fail "explicit-harness-no-tokens: meta model should stay default"
   [ "$(meta_field "$meta" effort)" = default ] || fail "explicit-harness-no-tokens: meta effort should stay default"
   launch=$(cat "$launchlog")
-  assert_contains "$launch" "codex --dangerously-bypass-approvals-and-sandbox" \
-    "explicit-harness-no-tokens: launch did not use codex"
+  # shellcheck disable=SC2016 # The pinned launch prefix is literal: ${CODEX_HOME} expands in the crewmate pane, not here.
+  assert_contains "$launch" 'env CODEX_HOME="${CODEX_HOME:-$HOME/.codex-fleet}" codex --dangerously-bypass-approvals-and-sandbox' \
+    "explicit-harness-no-tokens: secondmate launch did not inject the fleet CODEX_HOME before codex"
   assert_not_contains "$launch" "--model" "explicit-harness-no-tokens: launch must not carry a --model flag"
   assert_not_contains "$launch" "model_reasoning_effort" \
     "explicit-harness-no-tokens: launch must not carry a codex effort flag"
