@@ -1,0 +1,14 @@
+[2026-09-12T02:30:05+0800] agent-gone evidence (dead) pending confirmation: fmlv51467:fm-husk
+[2026-09-12T02:30:07+0800] agent gone (dead); surfaced once and suspended stale tracking: fmlv51467:fm-husk
+[2026-09-12T02:30:47+0800] absorbed non-terminal stale timer reset: fmlv51467:fm-aaa
+[2026-09-12T02:30:47+0800] agent-gone evidence (dead) pending confirmation: fmlv51467:fm-gone
+[2026-09-12T02:31:23+0800] absorbed non-terminal stale timer reset: fmlv51467:fm-aaa
+[2026-09-12T02:31:24+0800] agent-gone evidence (dead) pending confirmation: fmlv51467:fm-zzz
+[2026-09-12T02:31:27+0800] agent gone (dead); surfaced once and suspended stale tracking: fmlv51467:fm-zzz
+[2026-09-12T02:31:43+0800] agent-gone evidence (dead) pending confirmation: fmlv51467:fm-gone
+[2026-09-12T02:31:46+0800] agent gone (dead); surfaced once and suspended stale tracking: fmlv51467:fm-gone
+[2026-09-12T02:32:04+0800] agent reads alive again; resumed stale tracking: fmlv51467:fm-husk
+[2026-09-12T02:32:17+0800] agent-gone evidence (missing) pending confirmation: fmlv51467:fm-gone
+[2026-09-12T02:32:35+0800] agent-gone evidence (missing) pending confirmation: fmlv51467:fm-gone
+[2026-09-12T02:32:37+0800] agent gone (missing); surfaced once and suspended stale tracking: fmlv51467:fm-gone
+[2026-09-12T02:33:30+0800] agent reads alive again; resumed stale tracking: fmlv51467:fm-aaa

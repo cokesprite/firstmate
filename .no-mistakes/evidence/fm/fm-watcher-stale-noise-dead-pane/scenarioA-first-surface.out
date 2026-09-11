@@ -1,0 +1,1 @@
+stale: fmlv51467:fm-husk (agent gone: dead - the endpoint answers but holds no live agent (an empty shell or a stale registration); stale tracking for this identity is suspended until the agent reads alive again; recover or tear down the worker)
